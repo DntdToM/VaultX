@@ -1,47 +1,30 @@
 # VaultX
 
-Kho luu tru source code cho do an mon hoc ve Chrome Extension quan ly mat khau.
+Kho lưu trữ mã nguồn cho đồ án môn học về **Chrome Extension quản lý mật khẩu**.
 
-## Muc tieu hien tai
+---
 
-Hien tai repo nay uu tien dua len GitHub phan `logic/python` de ghi nhan tien do
-viet lai cac cau truc du lieu va giai thuat bang tay. Mot so thu muc khac duoc
-giu lai tren repo duoi dang placeholder de the hien cau truc tong the cua project.
-
-## Cau truc thu muc
+## Cấu trúc thư mục
 
 ```text
 VaultX/
-|-- assets/
-|   `-- .gitkeep
-|-- docs/
-|   `-- .gitkeep
-|-- logic/
-|   |-- python/
+|-- assets/          # Tài nguyên hình ảnh, icons
+|-- docs/            # Tài liệu hướng dẫn và sơ đồ
+|-- logic/           # Luồng xử lý chính
+|   |-- python/      # Thuật toán viết bằng Python (draft only)
 |   |   |-- cryptography.py
 |   |   |-- hashtable.py
 |   |   |-- kmp.py
 |   |   |-- stack.py
 |   |   `-- trie.py
-|   `-- *.js
-|-- popup/
-|   `-- .gitkeep
-|-- scripts/
-|   `-- .gitkeep
-|-- manifest.json
+|   `-- *.js         # Logic chuyển đổi sang JavaScript
+|-- popup/           # Giao diện người dùng (HTML/CSS)
+|-- scripts/         # Content scripts cho Extension
+|-- manifest.json    # File cấu hình Chrome Extension
 |-- .gitignore
 `-- README.md
 ```
 
-## Ghi chu
+Luồng thực thi Prototype (Figma)
 
-- `logic/python/`: Noi viet va luu cac phien ban Python cua thuat toan.
-- `assets/`, `docs/`, `popup/`, `scripts/`: Dang duoc giu tren GitHub bang
-  file `.gitkeep` de hien thi cau truc thu muc. Noi dung that se duoc dua len sau.
-- `logic/*.js`, `manifest.json`: Tam thoi chua dua len trong giai doan hien tai.
-
-## Tien do du kien
-
-1. Hoan thien ban Python cho tung thuat toan.
-2. Chuyen doi sang JavaScript theo API cua extension.
-3. Dua len cac phan giao dien, script va tai nguyen con lai.
+![Sơ đồ luồng VaultX](./docs/images/prototype.png)
