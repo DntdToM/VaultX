@@ -1,0 +1,23 @@
+# Temporarily keep the repository focused on Python algorithm files.
+# Git does not track empty folders, so `.gitkeep` is allowed in placeholder
+# directories that should still appear on GitHub.
+
+/assets/*
+!/assets/.gitkeep
+
+/docs/*
+!/docs/.gitkeep
+
+/popup/*
+!/popup/.gitkeep
+
+/scripts/*
+!/scripts/.gitkeep
+
+/logic/*.js
+/manifest.json
+/readme.txt
+
+# Keep this file and any future GitHub README tracked.
+!.gitignore
+!README.md
