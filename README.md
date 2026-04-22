@@ -27,4 +27,4 @@ VaultX/
 
 Luồng thực thi Prototype (Figma)
 
-![Sơ đồ luồng VaultX](./docs/images/prototype.png)
+![Sơ đồ luồng VaultX](./docs/images/wireframe_prototype.png)
