@@ -1,19 +1,145 @@
+"""
+Gợi ý từ tiếp theo (Autocomplete) khi người dùng nhập dữ liệu trên SearchBar bằng CTDL Trie.
+
+Version: Python
+Last edit: 2026-04-26
+Author: 25520260
+"""
+
+
+class TrieNode:
+    """
+    Node trong Trie, dùng để lưu ký tự và các node con.
+
+    Mỗi node có:
+    - children: dict chứa các node con.
+    - is_end_of_word: đánh dấu đây có phải là điểm kết thúc của một từ hay không.
+    """
+
+    def __init__(self):
+        """
+        Khởi tạo một node rỗng.
+
+        Args:
+            None
+        Returns:
+            None
+
+        {
+            "children": 
+            {
+                "u": TrieNode,
+                "a": TrieNode,
+                ...
+            },
+            "is_end_of_word": True/False
+        }        
+        """
+        self.children = {} 
+        self.is_end_of_word = False
+
+
 class Trie:
     """
-    Cây tiền tố dùng để lưu domain và username.
+    Trie dùng để lưu các chuỗi và hỗ trợ gợi ý theo tiền tố.
 
-    Cấu trúc này hỗ trợ gợi ý khi người dùng gõ tìm kiếm (autocomplete). Ví dụ, khi người dùng gõ "fa", Trie có thể nhanh chóng gợi ý "facebook.com" hoặc "fahasa.com" nếu chúng tồn tại trong Trie.
-    Trie rất phù hợp cho autocomplete vì tìm theo tiền tố rất nhanh, với độ phức tạp O(L), trong đó L là độ dài chuỗi đang nhập.
-
-    Args:
-        Nút gốc và cách lưu các nút con.
-        Mỗi nút có thể lưu thông tin tài khoản nếu nó là kết thúc của một domain hoặc username.
-        Hàm insert() để thêm domain hoặc username vào Trie, và hàm search() để tìm kiếm theo tiền tố.
-
-    Returns:
-        Một đối tượng Trie dùng để chèn và tìm chuỗi theo tiền tố.
-        Ví dụ, trie.insert("facebook.com") sẽ thêm domain này vào Trie, và trie.search("fa") sẽ trả về True nếu có ít nhất một domain bắt đầu bằng "fa", hoặc False nếu không có.
-        Tương tác với SearchBar trên extension để gợi ý khi người dùng nhập. Khi người dùng nhập, chương trình sẽ gọi trie.search(prefix) để lấy danh sách gợi ý phù hợp với prefix đã nhập.
+    Chức năng chính:
+    - insert
+    - collect
+    - suggest
     """
 
-    pass
+    def __init__(self):
+        """
+        Tạo một Trie mới với node gốc.
+
+        Args:
+            None
+        Returns:
+            None
+        """
+        self.root = TrieNode()
+
+    def insert(self, word):
+        """
+        Thêm một chuỗi vào Trie.
+
+        Args:
+            word: Chuỗi cần thêm vào Trie.
+        Returns:
+            None
+        """
+        cur_node = self.root
+        for char in word:
+            if char not in cur_node.children:
+                cur_node.children[char] = TrieNode()
+            cur_node = cur_node.children[char]
+        cur_node.is_end_of_word = True
+
+    def collect(self, node, cur_word, results, limit):
+        """
+        Duyệt từ node hiện tại để gom các từ hợp lệ.
+        DFS Traversal để thu thập các chuỗi con bắt đầu từ node hiện tại.
+
+        Args:
+            node: Node hiện tại đang xét.
+            current_word: Chuỗi đã ghép được đến node này.
+            results: Danh sách kết quả đang thu thập.
+            limit: Số lượng kết quả tối đa.
+        Returns:
+            None
+        """
+        if len(results) >= limit:
+            return
+        
+        if node.is_end_of_word:
+            results.append(cur_word)
+
+        for char, child_node in node.children.items():
+            self.collect(child_node, cur_word + char, results, limit)
+
+    def suggest(self, prefix, limit = 6):
+        """
+        Tìm danh sách gợi ý bắt đầu bằng prefix.
+
+        Args:
+            prefix: Chuỗi tiền tố cần tìm.
+            limit: Số lượng kết quả tối đa muốn lấy.
+        Returns:
+            List các chuỗi bắt đầu bằng prefix.
+        """
+        cur_node = self.root
+
+        for char in prefix:
+            if char not in cur_node.children:
+                return []
+            cur_node = cur_node.children[char]
+
+        results = []
+        self.collect(cur_node, prefix, results, limit)
+
+        return results
+
+
+def main():
+    """
+    Hàm main để kiểm tra nhanh Trie.
+
+    Args:
+        None
+    Returns:
+        None
+    """
+    trie = Trie()
+
+    trie.insert("user123")
+    trie.insert("user456")
+    trie.insert("admin999")
+    trie.insert("adam123")
+
+    prefix = "9"
+    results = trie.suggest(prefix, 6)
+    print(f"Gợi ý với prefix '{prefix}': {results}")
+
+if __name__ == "__main__":
+    main()
