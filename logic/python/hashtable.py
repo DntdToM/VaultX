@@ -26,7 +26,7 @@ class HashTable:
         Tạo một HashTable mới.
 
         Args:
-            bucket_count: Số bucket trong bảng băm.
+            bucket_count: Số bucket (ngăn) trong bảng băm.
         Returns:
             None
         """
