@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VaultX</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header surface" id="app-header">
+        <div class="brand-lockup">
+          <span class="brand-mark" data-icon="shield"></span>
+          <div>
+            <p class="eyebrow">VaultX</p>
+            <h1>Password Manager</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span id="vault-status" class="status-pill tone-safe">Đã mở khóa</span>
+          <button id="btn-lock" class="icon-button" type="button" aria-label="Khóa Vault">
+            <span data-icon="lock"></span>
+          </button>
+        </div>
+      </header>
+
+      <section id="banner" class="message-banner surface-soft is-hidden" aria-live="polite"></section>
+      <main id="screen-stage" class="screen-stage"></main>
+
+      <nav id="bottom-nav" class="bottom-nav surface is-hidden">
+        <button class="nav-tab is-active" data-tab="vault" type="button">
+          <span data-icon="shield"></span>
+          <span class="nav-label">Vault</span>
+        </button>
+        <button class="nav-tab" data-tab="generator" type="button">
+          <span data-icon="spark"></span>
+          <span class="nav-label">Tạo</span>
+        </button>
+        <button class="nav-tab" data-tab="settings" type="button">
+          <span data-icon="settings"></span>
+          <span class="nav-label">Cài đặt</span>
+        </button>
+      </nav>
+    </div>
+
+    <dialog id="account-dialog" class="account-dialog">
+      <form id="account-form" method="dialog" class="dialog-card surface">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">VaultX</p>
+            <h3 id="dialog-title">Thêm tài khoản</h3>
+          </div>
+          <button id="dialog-close" class="icon-button" type="button" aria-label="Đóng">
+            <span data-icon="close"></span>
+          </button>
+        </div>
+
+        <input id="account-id" type="hidden" />
+
+        <div class="field">
+          <label for="account-domain">Tên miền</label>
+          <input id="account-domain" type="text" placeholder="github.com" required />
+        </div>
+
+        <div class="field">
+          <label for="account-username">Tên đăng nhập</label>
+          <input id="account-username" type="text" placeholder="user@email.com" required />
+        </div>
+
+        <div class="field">
+          <label for="account-password">Mật khẩu</label>
+          <div class="input-with-action">
+            <input id="account-password" type="text" placeholder="••••••••" required />
+            <button id="dialog-generate" class="input-action" type="button" aria-label="Tạo mật khẩu">
+              <span data-icon="spark"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="account-notes">Ghi chú</label>
+          <textarea id="account-notes" rows="2" placeholder="VD: Bật 2FA, tài khoản công ty..."></textarea>
+        </div>
+
+        <div class="action-row">
+          <button id="dialog-cancel" class="btn btn-ghost" type="button">Hủy</button>
+          <button class="btn btn-primary" type="submit">Lưu tài khoản</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

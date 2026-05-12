@@ -230,73 +230,43 @@ export async function decryptAES(ciphertextBase64, masterPassword, saltBase64) {
  * @returns {{score: number, label: string, feedback: string}}
  */
 export function estimatePasswordStrength(password) {
-  if (password === "") {
-    return {
-      score: 0,
-      label: "Rất yếu",
-      feedback: "Mật khẩu đang trống."
+  if (!password) {
+    return { 
+      score: 0, 
+      label: "Rất yếu", 
+      feedback: "Mật khẩu không được để trống." 
     };
   }
-
-  const hasLower = [...password].some((char) => /[a-z]/.test(char));
-  const hasUpper = [...password].some((char) => /[A-Z]/.test(char));
-  const hasNumber = [...password].some((char) => /[0-9]/.test(char));
-  const hasSymbol = [...password].some((char) => /[^a-zA-Z0-9]/.test(char));
 
   let score = 0;
+  let tips = [];
 
-  if (password.length >= 8) {
-    score += 1;
-  }
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  else tips.push("Nên dùng ít nhất 12 ký tự để an toàn hơn.");
 
-  if (password.length >= 12) {
-    score += 1;
-  }
+  if (/[a-z]/.test(password)) score++;
+  else tips.push("Thêm chữ cái thường.");
 
-  if (hasLower) {
-    score += 1;
-  }
+  if (/[A-Z]/.test(password)) score++;
+  else tips.push("Thêm chữ cái viết hoa.");
 
-  if (hasUpper) {
-    score += 1;
-  }
+  if (/[0-9]/.test(password)) score++;
+  else tips.push("Thêm ít nhất một chữ số.");
 
-  if (hasNumber) {
-    score += 1;
-  }
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  else tips.push("Thêm ký tự đặc biệt (ví dụ: !@#$).");
 
-  if (hasSymbol) {
-    score += 1;
-  }
-
-  if (score <= 2) {
-    return {
-      score,
-      label: "Yếu",
-      feedback: "Mật khẩu còn yếu."
-    };
-  }
-
-  if (score <= 4) {
-    return {
-      score,
-      label: "Trung bình",
-      feedback: "Mật khẩu tạm ổn."
-    };
-  }
-
-  if (score === 5) {
-    return {
-      score,
-      label: "Mạnh",
-      feedback: "Mật khẩu khá mạnh."
-    };
-  }
+  let label = "Rất yếu";
+  if (score >= 6) label = "Rất mạnh";
+  else if (score >= 5) label = "Mạnh";
+  else if (score >= 3) label = "Trung bình";
+  else label = "Yếu";
 
   return {
     score,
-    label: "Rất mạnh",
-    feedback: "Mật khẩu rất tốt."
+    label,
+    feedback: tips.length > 0 ? tips.join(" ") : "Mật khẩu rất tốt!"
   };
 }
 

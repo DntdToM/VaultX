@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "VaultX",
+  "version": "1.1.0",
+  "description": "VaultX - Chrome Extension quản lý mật khẩu.",
+  "permissions": ["storage", "clipboardWrite", "alarms"],
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "action": {
+    "default_title": "VaultX",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png"
+    }
+  },
+  "background": {
+    "service_worker": "scripts/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["scripts/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

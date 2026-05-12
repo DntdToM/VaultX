@@ -11,7 +11,7 @@ VaultX/
 |-- assets/          # Tài nguyên hình ảnh, icons
 |-- docs/            # Tài liệu hướng dẫn và sơ đồ
 |-- logic/           # Luồng xử lý chính
-|   |-- python/      # Thuật toán viết bằng Python (draft only)
+|   |-- python/      # Thuật toán viết bằng Python trước khi chuyển sang JavaScript
 |   |   |-- cryptography.py
 |   |   |-- hashtable.py
 |   |   |-- kmp.py

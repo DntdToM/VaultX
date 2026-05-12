@@ -137,7 +137,7 @@ def main():
     trie.insert("admin999")
     trie.insert("adam123")
 
-    prefix = "9"
+    prefix = "us"
     results = trie.suggest(prefix, 6)
     print(f"Gợi ý với prefix '{prefix}': {results}")
 
