@@ -1,9 +1,19 @@
 import { generateSecurePassword } from "../logic/cryptography.js";
 
 const STORAGE_KEY = "vaultxState";
+const ACTIVE_PROFILE_KEY = "vaultxActiveGoogleEmail";
 const SESSION_KEY = "vaultxSessionVault";
 const PENDING_CAPTURE_KEY = "vaultxPendingCapture";
 const AUTO_LOCK_ALARM = "vaultx-auto-lock";
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function profileStorageKey(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return normalizedEmail ? `${STORAGE_KEY}:${normalizedEmail}` : STORAGE_KEY;
+}
 
 function createDefaultState() {
   return {
@@ -24,14 +34,37 @@ function createDefaultState() {
 }
 
 function readState() {
-  return chrome.storage.local.get(STORAGE_KEY).then((result) => {
-    const state = result[STORAGE_KEY];
-    return state || createDefaultState();
+  return chrome.storage.local.get(ACTIVE_PROFILE_KEY).then((profileResult) => {
+    const activeEmail = normalizeEmail(profileResult[ACTIVE_PROFILE_KEY]);
+    if (!activeEmail) {
+      return createDefaultState();
+    }
+
+    const key = profileStorageKey(activeEmail);
+    return chrome.storage.local.get(key).then((result) => {
+      const state = result[key];
+      return state || createDefaultState();
+    });
   });
 }
 
 function writeState(nextState) {
-  return chrome.storage.local.set({ [STORAGE_KEY]: nextState });
+  return chrome.storage.local.get(ACTIVE_PROFILE_KEY).then((profileResult) => {
+    const activeEmail = normalizeEmail(profileResult[ACTIVE_PROFILE_KEY] || nextState.googleEmail);
+    if (!activeEmail) {
+      return Promise.resolve();
+    }
+
+    const key = profileStorageKey(activeEmail);
+    return chrome.storage.local.set({ [key]: nextState });
+  });
+}
+
+function readLegacyState() {
+  return chrome.storage.local.get(STORAGE_KEY).then((result) => {
+    const state = result[STORAGE_KEY];
+    return state || createDefaultState();
+  });
 }
 
 function readSessionVault() {
@@ -72,9 +105,12 @@ function resetAutoLockAlarm(minutes = 5) {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const result = await chrome.storage.local.get(STORAGE_KEY);
-  if (!result[STORAGE_KEY]) {
-    await writeState(createDefaultState());
+  const activeProfile = await chrome.storage.local.get(ACTIVE_PROFILE_KEY);
+  if (!activeProfile[ACTIVE_PROFILE_KEY]) {
+    const legacyState = await readLegacyState();
+    if (legacyState.googleEmail) {
+      await chrome.storage.local.set({ [ACTIVE_PROFILE_KEY]: normalizeEmail(legacyState.googleEmail) });
+    }
   }
 });
 

@@ -496,6 +496,44 @@ svg {
   margin-top: 0;
 }
 
+.auth-actions {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 292px);
+  margin: 0 auto;
+  justify-items: stretch;
+}
+
+.btn-google {
+  gap: 9px;
+}
+
+.btn-google span[data-icon="google"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.btn-google span[data-icon="google"] svg {
+  stroke: none;
+}
+
+.generated-secret {
+  transition: color .12s var(--ease);
+}
+
+.btn-danger-history {
+  margin-top: 8px;
+  background: rgba(230, 72, 44, .14);
+  border: 1px solid rgba(230, 72, 44, .28);
+  color: #d9421e;
+}
+
+.btn-danger-history:hover {
+  background: rgba(230, 72, 44, .22);
+  color: #b83216;
+}
+
 .banner-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
@@ -1000,4 +1038,22 @@ svg {
   border: none;
   box-shadow: none;
   background: transparent;
+}
+
+[data-theme] .btn-danger-history {
+  background: #ffe1d8;
+  border-color: rgba(217, 66, 30, .35);
+  color: #d9421e;
+}
+
+[data-theme] .btn-danger-history:hover {
+  background: #ffc8b8;
+  color: #9f2a13;
+}
+
+[data-theme="neobrutalism"] .btn-danger-history {
+  background: #ff4d8d;
+  border: 2px solid #111;
+  color: #111;
+  box-shadow: 4px 4px 0 #111;
 }

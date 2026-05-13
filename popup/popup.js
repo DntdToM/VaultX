@@ -12,6 +12,7 @@ import {
 } from "../logic/cryptography.js";
 
 const STORAGE_KEY = "vaultxState";
+const ACTIVE_PROFILE_KEY = "vaultxActiveGoogleEmail";
 const SESSION_KEY = "vaultxSessionVault";
 const PENDING_CAPTURE_KEY = "vaultxPendingCapture";
 const DEFAULT_SETTINGS = { autoLockMinutes: 5, language: "vi", theme: "mono" };
@@ -38,6 +39,7 @@ const ICONS = {
   settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
   refresh: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
+  eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
   google: '<svg viewBox="0 0 48 48" stroke="none"><path d="M43.6 20.5H42V20H24v8h11.3C33.7 33.1 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.2-.1-2.3-.4-3.5z" fill="#d4d4d4"/><path d="M6.3 14.7l6.6 4.8C14.5 16 18.9 13 24 13c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" fill="#777"/><path d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3-11.3-7.3l-6.5 5C9.5 39.6 16.2 44 24 44z" fill="#aaa"/><path d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.7 39.5 44 34 44 24c0-1.2-.1-2.3-.4-3.5z" fill="#111"/></svg>'
 };
 
@@ -53,11 +55,24 @@ let accountIndex = new HashTable(29);
 let flash = null;
 let flashTimer = null;
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function profileStorageKey(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return normalizedEmail ? `${STORAGE_KEY}:${normalizedEmail}` : STORAGE_KEY;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   cacheDom();
   renderIcons(document);
   bindShell();
-  state = normalize(await readStorage());
+  const activeEmail = await readActiveProfileEmail();
+  state = normalize(await readStorage(activeEmail));
+  if (activeEmail) {
+    state.googleEmail = activeEmail;
+  }
   state.pendingCapture = await readPendingCapture();
   rebuildAccountIndex();
   applyTheme();
@@ -151,7 +166,44 @@ function bindShell() {
   });
 }
 
-async function readStorage() {
+async function readActiveProfileEmail() {
+  if (globalThis.chrome?.storage?.local) {
+    const result = await chrome.storage.local.get(ACTIVE_PROFILE_KEY);
+    return normalizeEmail(result[ACTIVE_PROFILE_KEY]);
+  }
+
+  return normalizeEmail(localStorage.getItem(ACTIVE_PROFILE_KEY));
+}
+
+async function writeActiveProfileEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (globalThis.chrome?.storage?.local) {
+    await chrome.storage.local.set({ [ACTIVE_PROFILE_KEY]: normalizedEmail });
+    return;
+  }
+
+  localStorage.setItem(ACTIVE_PROFILE_KEY, normalizedEmail);
+}
+
+async function readStorage(email = null) {
+  const activeEmail = normalizeEmail(email) || await readActiveProfileEmail();
+  if (!activeEmail) {
+    return null;
+  }
+
+  const key = profileStorageKey(activeEmail);
+
+  if (globalThis.chrome?.storage?.local) {
+    const result = await chrome.storage.local.get(key);
+    return result[key] || null;
+  }
+
+  const raw = localStorage.getItem(key);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function readLegacyStorage() {
   if (globalThis.chrome?.storage?.local) {
     const result = await chrome.storage.local.get(STORAGE_KEY);
     return result[STORAGE_KEY] || null;
@@ -161,13 +213,28 @@ async function readStorage() {
   return raw ? JSON.parse(raw) : null;
 }
 
-async function writeStorage(nextState) {
+async function writeStorage(nextState, email = state.googleEmail) {
+  const activeEmail = normalizeEmail(email);
+  const key = profileStorageKey(activeEmail);
+
   if (globalThis.chrome?.storage?.local) {
-    await chrome.storage.local.set({ [STORAGE_KEY]: nextState });
+    await chrome.storage.local.set({ [key]: nextState });
     return;
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+  localStorage.setItem(key, JSON.stringify(nextState));
+}
+
+async function removeProfileStorage(email = state.googleEmail) {
+  const activeEmail = normalizeEmail(email);
+  const key = profileStorageKey(activeEmail);
+
+  if (globalThis.chrome?.storage?.local) {
+    await chrome.storage.local.remove(key);
+    return;
+  }
+
+  localStorage.removeItem(key);
 }
 
 async function writeSessionVault() {
@@ -272,10 +339,6 @@ function autoRoute() {
 
 function navigate(screen) {
   currentScreen = screen;
-
-  if (screen === "generator" && !generatedPassword) {
-    generatedPassword = generatePasswordFromControls();
-  }
 
   render();
 }
@@ -462,10 +525,12 @@ function welcome() {
             Shuffle
           </span>
         </div>
-        <button id="btn-start-setup" class="btn btn-primary btn-full welcome-cta" type="button">
-          <span data-icon="key"></span>
-          Bắt đầu thiết lập
-        </button>
+        <div class="auth-actions">
+          <button id="btn-google" class="btn btn-secondary btn-full btn-google" type="button">
+            <span data-icon="google"></span>
+            Đăng nhập bằng Google
+          </button>
+        </div>
       </div>
     </div>
   </section>`;
@@ -477,14 +542,25 @@ function onboarding() {
       <div class="center-card">
         <span class="hero-icon" data-icon="key"></span>
         <strong>Tạo Master Password</strong>
-        <p class="hint">Mật khẩu này dùng để mở khóa dữ liệu của bạn.</p>
+        <p class="hint">${state.googleEmail
+          ? `Google: ${esc(state.googleEmail)}. Mật khẩu chính vẫn dùng để mã hóa vault.`
+          : "Mật khẩu này dùng để mở khóa dữ liệu của bạn."}</p>
         <form id="form-onboard">
           <div class="field">
             <label for="mp-create">Master Password</label>
-            <input id="mp-create" type="password" placeholder="Nhập mật khẩu chính" required />
+            <div class="input-with-action">
+              <input id="mp-create" type="password" autocomplete="new-password" placeholder="Tối thiểu 12 ký tự" required />
+              <button id="btn-ob-gen" class="input-action" type="button" title="Tạo mật khẩu ngẫu nhiên">
+                <span data-icon="spark"></span>
+              </button>
+            </div>
           </div>
-          ${meter("ob", { label: false })}
-          <button class="btn btn-primary btn-full" type="submit">Tạo vault</button>
+          <div class="field">
+            <label for="mp-confirm">Nhập lại</label>
+            <input id="mp-confirm" type="password" autocomplete="new-password" placeholder="Xác nhận mật khẩu" required />
+          </div>
+          ${meter("ob")}
+          <button class="btn btn-primary btn-full" type="submit">Tạo Vault</button>
         </form>
       </div>
     </div>
@@ -497,7 +573,9 @@ function unlock() {
       <div class="center-card">
         <span class="hero-icon" data-icon="lock"></span>
         <strong>Mở khóa VaultX</strong>
-        <p class="hint">Nhập mật khẩu chính để xem dữ liệu đã lưu.</p>
+        <p class="hint">${state.googleEmail
+          ? `Google: ${esc(state.googleEmail)}. Nhập mật khẩu chính để mở vault.`
+          : "Nhập mật khẩu chính để xem dữ liệu đã lưu."}</p>
         <form id="form-unlock">
           <div class="field">
             <label for="mp-unlock">Master Password</label>
@@ -565,43 +643,35 @@ function detail() {
 }
 
 function generator() {
-  if (!generatedPassword) {
-    generatedPassword = generatePasswordFromControls();
-  }
-
-  const strength = estimatePasswordStrength(generatedPassword);
+  const historyCount = (state.generatorHistory || []).length;
 
   return `<section class="screen">
     <div class="panel surface">
       <div class="panel-head"><h3>Tạo mật khẩu</h3></div>
       <div class="gen-result-row">
-        <span class="gen-text" id="gen-text">${esc(generatedPassword)}</span>
+        <span class="gen-text" id="gen-text">-</span>
         <div class="gen-actions">
-          <button class="icon-button" id="btn-gen-refresh" type="button"><span data-icon="refresh"></span></button>
-          <button class="icon-button" id="btn-gen-copy" type="button"><span data-icon="copy"></span></button>
+          <button class="icon-button" id="btn-gen-refresh" type="button" title="Tạo mới"><span data-icon="refresh"></span></button>
+          <button class="icon-button" id="btn-gen-copy" type="button" title="Sao chép"><span data-icon="copy"></span></button>
         </div>
       </div>
       ${meter("gen")}
       <div class="field">
-        <label for="gen-len">Độ dài: <strong id="gen-len-label">${getGeneratorOptions().length}</strong></label>
-        <input id="gen-len" type="range" min="8" max="64" value="${getGeneratorOptions().length}" />
+        <label for="gen-len">Độ dài: <strong id="gen-len-label">18</strong></label>
+        <input id="gen-len" type="range" min="8" max="128" value="18" />
       </div>
       <div class="panel-head"><h3>Bao gồm</h3></div>
       <div class="check-grid">
-        <label class="stat-card"><input id="ck-upper" type="checkbox" ${getGeneratorOptions().uppercase ? "checked" : ""} /><span>A-Z</span></label>
-        <label class="stat-card"><input id="ck-lower" type="checkbox" ${getGeneratorOptions().lowercase ? "checked" : ""} /><span>a-z</span></label>
-        <label class="stat-card"><input id="ck-num" type="checkbox" ${getGeneratorOptions().numbers ? "checked" : ""} /><span>0-9</span></label>
-        <label class="stat-card"><input id="ck-sym" type="checkbox" ${getGeneratorOptions().symbols ? "checked" : ""} /><span>!@#$%</span></label>
-      </div>
-      <div class="callout tone-blue">
-        <strong id="gen-strength-title">${esc(strength.label)}</strong>
-        <p class="hint" id="gen-strength-feedback">${esc(strength.feedback)}</p>
+        <label class="stat-card"><input id="ck-upper" type="checkbox" checked /><span>A-Z</span></label>
+        <label class="stat-card"><input id="ck-lower" type="checkbox" checked /><span>a-z</span></label>
+        <label class="stat-card"><input id="ck-num" type="checkbox" checked /><span>0-9</span></label>
+        <label class="stat-card"><input id="ck-sym" type="checkbox" checked /><span>!@#$%</span></label>
       </div>
     </div>
     <button class="link-row" id="btn-gen-history" type="button">
-      <span>Lịch sử tạo mật khẩu</span>
+      <span>Generator history</span>
       <span class="link-row-right">
-        <span id="gen-history-count">${state.generatorHistory.length} bản ghi</span>
+        <span id="gen-history-count">${historyCount}</span>
         <span data-icon="back" style="transform:rotate(180deg)"></span>
       </span>
     </button>
@@ -609,22 +679,18 @@ function generator() {
 }
 
 function genHistory() {
+  const history = state.generatorHistory || [];
+
   return `<section class="screen">
     <div class="nav-row">
       <button class="btn-back" id="btn-back-gen" type="button"><span data-icon="back"></span></button>
-      <h2>Lịch sử tạo mật khẩu</h2>
-      <span class="tag tone-neutral">${state.generatorHistory.length}</span>
+      <h2>Generator history</h2>
+      <span class="tag tone-neutral">${history.length}</span>
     </div>
-    <div class="history-list">
-      ${state.generatorHistory.length
-        ? state.generatorHistory.map((entry) => `<article class="history-item">
-            <div class="history-row">
-              <div><strong style="font-family:monospace;font-size:12px">${esc(entry.password)}</strong><p class="hint">${fmtDate(entry.createdAt)}. ${esc(entry.label)}</p></div>
-              <button class="btn btn-secondary" data-copy-generated="${esc(entry.password)}" type="button"><span data-icon="copy"></span>Copy</button>
-            </div>
-          </article>`).join("")
-        : '<div class="panel surface"><p class="hint">Chưa có mật khẩu nào được sinh.</p></div>'}
-    </div>
+    ${history.length
+      ? `<div class="history-list">${history.map((entry, index) => genHistoryCard(entry, index)).join("")}</div>
+         <button class="btn btn-warning btn-full btn-danger-history" id="btn-clear-gen-history" type="button">Xóa toàn bộ lịch sử</button>`
+      : emptyState("Chưa có mật khẩu nào được tạo.")}
   </section>`;
 }
 
@@ -661,6 +727,9 @@ function settings() {
     </div>
     <div class="panel surface">
       <div class="panel-head"><h3>Phiên đăng nhập</h3></div>
+      <p class="hint">${state.googleEmail
+        ? `Google: ${esc(state.googleEmail)}`
+        : "Chưa liên kết tài khoản Google. Master Password vẫn là lớp bảo vệ chính của vault."}</p>
       <button class="btn btn-secondary btn-full" id="btn-logout" type="button">Khóa vault</button>
     </div>
     <div class="panel surface">
@@ -708,6 +777,16 @@ function historyCard(entry, index) {
   </div></article>`;
 }
 
+function genHistoryCard(entry, index) {
+  return `<article class="history-item"><div class="history-row">
+    <div><strong class="generated-secret" data-gen-secret="${index}" style="font-family:monospace;font-size:12px">${mask(entry.password)}</strong><p class="hint">${fmtDate(entry.changedAt || entry.createdAt || new Date().toISOString())}</p></div>
+    <div class="quick-actions">
+      <button class="icon-button" data-gen-hist-copy="${index}" type="button" title="Sao chép"><span data-icon="copy"></span></button>
+      <button class="icon-button" data-gen-hist-reveal="${index}" type="button" title="Giữ chuột để hiện mật khẩu"><span data-icon="eye"></span></button>
+    </div>
+  </div></article>`;
+}
+
 function emptyState(text) {
   return `<div class="empty-state"><span data-icon="search"></span><p class="hint">${esc(text)}</p></div>`;
 }
@@ -731,8 +810,9 @@ function dashboardResultsHTML() {
 }
 
 function bindScreen() {
-  document.getElementById("btn-start-setup")?.addEventListener("click", handleStartSetup);
+  document.getElementById("btn-google")?.addEventListener("click", handleGoogleSignIn);
   document.getElementById("form-onboard")?.addEventListener("submit", handleOnboard);
+  document.getElementById("btn-ob-gen")?.addEventListener("click", handleOnboardGenerate);
   document.getElementById("form-unlock")?.addEventListener("submit", handleUnlock);
   document.getElementById("mp-create")?.addEventListener("input", (event) => {
     updateStrengthMeter("ob", event.currentTarget.value);
@@ -764,11 +844,33 @@ function bindScreen() {
   });
 
   document.getElementById("btn-gen-refresh")?.addEventListener("click", handleGeneratePassword);
-  document.getElementById("btn-gen-copy")?.addEventListener("click", () => copyText(generatedPassword, "Đã sao chép mật khẩu vừa sinh."));
+  document.getElementById("btn-gen-copy")?.addEventListener("click", handleCopyGeneratedPassword);
   document.getElementById("btn-gen-history")?.addEventListener("click", () => navigate("genHistory"));
   document.getElementById("btn-back-gen")?.addEventListener("click", () => navigate("generator"));
-  document.querySelectorAll("[data-copy-generated]").forEach((button) => {
-    button.addEventListener("click", () => copyText(button.dataset.copyGenerated, "Đã sao chép mật khẩu trong history."));
+  document.getElementById("btn-clear-gen-history")?.addEventListener("click", handleClearGeneratorHistory);
+  document.querySelectorAll("[data-gen-hist-copy]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const entry = (state.generatorHistory || [])[Number(button.dataset.genHistCopy)];
+      if (entry) {
+        copyText(entry.password, "Đã sao chép mật khẩu trong history.");
+      }
+    });
+  });
+  document.querySelectorAll("[data-gen-hist-reveal]").forEach((button) => {
+    const entry = (state.generatorHistory || [])[Number(button.dataset.genHistReveal)];
+    const secret = document.querySelector(`[data-gen-secret="${button.dataset.genHistReveal}"]`);
+
+    if (!entry || !secret) {
+      return;
+    }
+
+    const show = () => { secret.textContent = entry.password; };
+    const hide = () => { secret.textContent = mask(entry.password); };
+
+    button.addEventListener("mouseenter", show);
+    button.addEventListener("mouseleave", hide);
+    button.addEventListener("focus", show);
+    button.addEventListener("blur", hide);
   });
 
   ["gen-len", "ck-upper", "ck-lower", "ck-num", "ck-sym"].forEach((id) => {
@@ -784,7 +886,11 @@ function bindScreen() {
 function syncMeters() {
   const onboardPassword = document.getElementById("mp-create")?.value || "";
   updateStrengthMeter("ob", onboardPassword);
-  updateStrengthMeter("gen", generatedPassword);
+  try {
+    syncGeneratorPreview();
+  } catch (error) {
+    showFlash(error.message);
+  }
 }
 
 function updateStrengthMeter(prefix, password) {
@@ -796,24 +902,116 @@ function updateStrengthMeter(prefix, password) {
   }
 
   const strength = estimatePasswordStrength(password || "");
-  fill.style.width = `${Math.round((strength.score / 6) * 100)}%`;
+  fill.style.width = `${Math.round(strength.score)}%`;
   label.textContent = strength.label;
   if (hint) {
     hint.textContent = strength.feedback;
   }
 }
 
-function handleStartSetup(event) {
+function handleOnboardGenerate(event) {
   event.preventDefault();
-  navigate("onboarding");
+  const password = generateSecurePassword({ length: 18, uppercase: true, lowercase: true, numbers: true, symbols: true });
+  const createInput = document.getElementById("mp-create");
+  const confirmInput = document.getElementById("mp-confirm");
+
+  if (createInput) {
+    createInput.value = password;
+    createInput.type = "text";
+  }
+
+  if (confirmInput) {
+    confirmInput.value = password;
+  }
+
+  updateStrengthMeter("ob", password);
+}
+
+function readChromeProfileUserInfo() {
+  return new Promise((resolve, reject) => {
+    const done = (info) => {
+      const runtimeError = globalThis.chrome?.runtime?.lastError;
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+
+      resolve(info || {});
+    };
+
+    try {
+      chrome.identity.getProfileUserInfo({ accountStatus: "ANY" }, done);
+    } catch {
+      try {
+        chrome.identity.getProfileUserInfo(done);
+      } catch (error) {
+        reject(error);
+      }
+    }
+  });
+}
+
+async function handleGoogleSignIn(event) {
+  event?.preventDefault();
+
+  if (!globalThis.chrome?.identity?.getProfileUserInfo) {
+    showFlash("Chrome Identity API chưa khả dụng trong môi trường này.");
+    return;
+  }
+
+  try {
+    const info = await readChromeProfileUserInfo();
+
+    if (!info.email) {
+      showFlash("Chrome chưa trả email. Hãy reload extension và kiểm tra Chrome profile.");
+      return;
+    }
+
+    const email = normalizeEmail(info.email);
+    await writeActiveProfileEmail(email);
+
+    let rawState = await readStorage(email);
+
+    if (!rawState) {
+      const legacyState = await readLegacyStorage();
+      const legacyEmail = normalizeEmail(legacyState?.googleEmail);
+      if (legacyState?.masterCredential && (!legacyEmail || legacyEmail === email)) {
+        rawState = { ...legacyState, googleEmail: email };
+        await writeStorage(rawState, email);
+      }
+    }
+
+    state = normalize(rawState);
+    state.googleEmail = email;
+    state.pendingCapture = await readPendingCapture();
+    rebuildAccountIndex();
+    applyTheme();
+
+    showFlash(`Đã mở profile Google: ${email}`);
+
+    if (!state.masterCredential) {
+      navigate("onboarding");
+      return;
+    }
+
+    navigate(state.locked ? "unlock" : "dashboard");
+  } catch (error) {
+    showFlash(`Không đăng nhập Google được: ${error.message}`);
+  }
 }
 
 async function handleOnboard(event) {
   event.preventDefault();
   const password = document.getElementById("mp-create")?.value || "";
+  const confirmPassword = document.getElementById("mp-confirm")?.value || "";
 
-  if (password.length < 6) {
-    showFlash("Master password nên có ít nhất 6 ký tự để demo an toàn hơn.");
+  if (password !== confirmPassword) {
+    showFlash("Hai mật khẩu chưa khớp.");
+    return;
+  }
+
+  if (estimatePasswordStrength(password).score < 65) {
+    showFlash("Mật khẩu còn yếu.");
     return;
   }
 
@@ -962,26 +1160,54 @@ async function handleRestore(index) {
 
 async function handleGeneratePassword() {
   try {
-    generatedPassword = generatePasswordFromControls();
-    const strength = estimatePasswordStrength(generatedPassword);
-    state.generatorHistory = [
-      { password: generatedPassword, label: strength.label, createdAt: new Date().toISOString() },
-      ...state.generatorHistory
-    ].slice(0, 20);
-    await saveState();
+    syncGeneratorPreview();
+    if (generatedPassword && generatedPassword !== "-") {
+      await addToGenHistory(generatedPassword);
+    }
     updateGeneratorView();
   } catch (error) {
     showFlash(error.message);
   }
 }
 
+async function handleCopyGeneratedPassword() {
+  const password = document.getElementById("gen-text")?.textContent || generatedPassword;
+
+  if (!password || password === "-") {
+    return;
+  }
+
+  await addToGenHistory(password);
+  await copyText(password, "Đã sao chép mật khẩu vừa sinh.");
+  updateGeneratorView();
+}
+
 function handleGeneratorOptionChange() {
   try {
-    generatedPassword = generatePasswordFromControls();
-    updateGeneratorView();
+    syncGeneratorPreview();
   } catch (error) {
     showFlash(error.message);
   }
+}
+
+async function handleClearGeneratorHistory() {
+  state.generatorHistory = [];
+  await saveState();
+  showFlash("Đã xóa lịch sử.");
+  render();
+}
+
+async function addToGenHistory(password) {
+  const normalizedHistory = (state.generatorHistory || [])
+    .filter((entry) => entry?.password)
+    .map((entry) => ({
+      password: entry.password,
+      changedAt: entry.changedAt || entry.createdAt || new Date().toISOString()
+    }));
+  const stack = PasswordStack.fromArray(normalizedHistory, 50);
+  stack.push(password);
+  state.generatorHistory = stack.toArray();
+  await saveState();
 }
 
 async function handleSettings() {
@@ -1008,21 +1234,21 @@ async function handleBanner(event) {
 }
 
 async function handleResetVault() {
-  if (globalThis.chrome?.storage?.local) {
-    await chrome.storage.local.remove(STORAGE_KEY);
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
-  }
+  const currentEmail = normalizeEmail(state.googleEmail);
+
+  await removeProfileStorage(currentEmail);
 
   await clearSessionVault();
   await clearPendingCapture();
 
   state = createDefaultState();
+  state.googleEmail = currentEmail;
   rebuildAccountIndex();
   masterPasswordCache = null;
   searchQuery = "";
   generatedPassword = "";
-  autoRoute();
+  currentScreen = currentEmail ? "onboarding" : "welcome";
+  activeTab = "vault";
   showFlash("Đã xóa dữ liệu vault.");
   render();
 }
@@ -1107,32 +1333,31 @@ function updateGeneratorView() {
 
   const passwordText = document.getElementById("gen-text");
   const lengthLabel = document.getElementById("gen-len-label");
-  const strengthTitle = document.getElementById("gen-strength-title");
-  const strengthFeedback = document.getElementById("gen-strength-feedback");
   const historyCount = document.getElementById("gen-history-count");
-  const strength = estimatePasswordStrength(generatedPassword || "");
 
   if (passwordText) {
-    passwordText.textContent = generatedPassword;
+    passwordText.textContent = generatedPassword || "-";
   }
 
   if (lengthLabel) {
     lengthLabel.textContent = String(getGeneratorOptions().length);
   }
 
-  if (strengthTitle) {
-    strengthTitle.textContent = strength.label;
-  }
-
-  if (strengthFeedback) {
-    strengthFeedback.textContent = strength.feedback;
-  }
-
   if (historyCount) {
-    historyCount.textContent = `${state.generatorHistory.length} bản ghi`;
+    historyCount.textContent = String((state.generatorHistory || []).length);
   }
 
   updateStrengthMeter("gen", generatedPassword);
+}
+
+function syncGeneratorPreview() {
+  if (currentScreen !== "generator") {
+    return false;
+  }
+
+  generatedPassword = generatePasswordFromControls();
+  updateGeneratorView();
+  return true;
 }
 
 function openDialog(account = null, seed = null) {

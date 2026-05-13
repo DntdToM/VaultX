@@ -15,10 +15,10 @@ const SALT_LENGTH = 16;
 const NONCE_LENGTH = 12;
 const TAG_LENGTH = 16;
 
-const LOWERCASE_CHARS = "abcdefghijklmnopqrstuvwxyz";
-const UPPERCASE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const NUMBER_CHARS = "0123456789";
-const SYMBOL_CHARS = "!@#$%^&*()-_=+[]{}|;:,.<>?/~`";
+const LOWERCASE_CHARS = "abcdefghijkmnopqrstuvwxyz";
+const UPPERCASE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const NUMBER_CHARS = "23456789";
+const SYMBOL_CHARS = "!@#$%^&*()-_=+[]{}";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -33,7 +33,15 @@ function getSubtleCrypto() {
 
 function getRandomBytes(length) {
   const bytes = new Uint8Array(length);
-  globalThis.crypto.getRandomValues(bytes);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+    return bytes;
+  }
+
+  for (let index = 0; index < length; index += 1) {
+    bytes[index] = Math.floor(Math.random() * 256);
+  }
+
   return bytes;
 }
 
@@ -110,8 +118,10 @@ function timingSafeEqualStrings(left, right) {
 }
 
 function fisherYatesShuffle(array) {
+  const randomBytes = getRandomBytes(array.length);
+
   for (let i = array.length - 1; i > 0; i -= 1) {
-    const randomIndex = Math.floor(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * (i + 1));
+    const randomIndex = randomBytes[i] % (i + 1);
     [array[i], array[randomIndex]] = [array[randomIndex], array[i]];
   }
 
@@ -231,43 +241,34 @@ export async function decryptAES(ciphertextBase64, masterPassword, saltBase64) {
  */
 export function estimatePasswordStrength(password) {
   if (!password) {
-    return { 
-      score: 0, 
-      label: "Rất yếu", 
-      feedback: "Mật khẩu không được để trống." 
-    };
+    return { score: 0, label: "Yếu", feedback: "Mật khẩu không được để trống." };
   }
 
-  let score = 0;
-  let tips = [];
+  const checks = [
+    password.length >= 12,
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password)
+  ];
 
-  if (password.length >= 8) score++;
-  if (password.length >= 12) score++;
-  else tips.push("Nên dùng ít nhất 12 ký tự để an toàn hơn.");
+  const varietyBonus = checks.filter(Boolean).length * 15;
+  const lengthBonus = Math.min(password.length, 20) * 2;
+  const score = Math.min(100, varietyBonus + lengthBonus);
 
-  if (/[a-z]/.test(password)) score++;
-  else tips.push("Thêm chữ cái thường.");
+  if (score >= 85) {
+    return { score, label: "Rất mạnh", feedback: "Đủ tốt để dùng làm Master Password." };
+  }
 
-  if (/[A-Z]/.test(password)) score++;
-  else tips.push("Thêm chữ cái viết hoa.");
+  if (score >= 65) {
+    return { score, label: "Mạnh", feedback: "Nên thêm một ký tự đặc biệt để tăng độ khó." };
+  }
 
-  if (/[0-9]/.test(password)) score++;
-  else tips.push("Thêm ít nhất một chữ số.");
+  if (score >= 40) {
+    return { score, label: "Trung bình", feedback: "Cần thêm độ dài hoặc đa dạng ký tự." };
+  }
 
-  if (/[^a-zA-Z0-9]/.test(password)) score++;
-  else tips.push("Thêm ký tự đặc biệt (ví dụ: !@#$).");
-
-  let label = "Rất yếu";
-  if (score >= 6) label = "Rất mạnh";
-  else if (score >= 5) label = "Mạnh";
-  else if (score >= 3) label = "Trung bình";
-  else label = "Yếu";
-
-  return {
-    score,
-    label,
-    feedback: tips.length > 0 ? tips.join(" ") : "Mật khẩu rất tốt!"
-  };
+  return { score, label: "Yếu", feedback: "Quá ngắn hoặc quá dễ đoán." };
 }
 
 /**
@@ -277,50 +278,30 @@ export function estimatePasswordStrength(password) {
  * @returns {string}
  */
 export function generateSecurePassword(options = {}) {
-  const length = options.length ?? 16;
-  const useUppercase = options.uppercase ?? true;
-  const useLowercase = options.lowercase ?? true;
-  const useNumbers = options.numbers ?? true;
-  const useSymbols = options.symbols ?? true;
+  const config = {
+    length: Math.max(8, Math.min(options.length || 18, 128)),
+    uppercase: options.uppercase ?? true,
+    lowercase: options.lowercase ?? true,
+    numbers: options.numbers ?? true,
+    symbols: options.symbols ?? true
+  };
 
-  const pools = [];
-  const passwordChars = [];
+  const charSets = [
+    config.uppercase ? UPPERCASE_CHARS : "",
+    config.lowercase ? LOWERCASE_CHARS : "",
+    config.numbers ? NUMBER_CHARS : "",
+    config.symbols ? SYMBOL_CHARS : ""
+  ];
 
-  if (useLowercase) {
-    pools.push(LOWERCASE_CHARS);
-    passwordChars.push(LOWERCASE_CHARS[Math.floor(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * LOWERCASE_CHARS.length)]);
+  const alphabet = charSets.join("");
+  if (!alphabet) {
+    return "";
   }
 
-  if (useUppercase) {
-    pools.push(UPPERCASE_CHARS);
-    passwordChars.push(UPPERCASE_CHARS[Math.floor(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * UPPERCASE_CHARS.length)]);
-  }
+  const poolSize = Math.max(config.length * 2, alphabet.length);
+  const randomBytes = getRandomBytes(poolSize);
+  const pool = Array.from(randomBytes, (byte) => alphabet[byte % alphabet.length]);
 
-  if (useNumbers) {
-    pools.push(NUMBER_CHARS);
-    passwordChars.push(NUMBER_CHARS[Math.floor(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * NUMBER_CHARS.length)]);
-  }
-
-  if (useSymbols) {
-    pools.push(SYMBOL_CHARS);
-    passwordChars.push(SYMBOL_CHARS[Math.floor(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * SYMBOL_CHARS.length)]);
-  }
-
-  if (pools.length === 0) {
-    throw new Error("Phải chọn ít nhất một nhóm ký tự.");
-  }
-
-  if (length < passwordChars.length) {
-    throw new Error("Độ dài mật khẩu quá ngắn so với số nhóm ký tự đã chọn.");
-  }
-
-  const allChars = pools.join("");
-
-  while (passwordChars.length < length) {
-    const randomIndex = Math.floor(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * allChars.length);
-    passwordChars.push(allChars[randomIndex]);
-  }
-
-  fisherYatesShuffle(passwordChars);
-  return passwordChars.join("");
+  fisherYatesShuffle(pool);
+  return pool.slice(0, config.length).join("");
 }
